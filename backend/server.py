@@ -1,88 +1,582 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import uuid
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
+from typing import List, Optional
+from datetime import datetime, timezone, date, timedelta
+
+import requests
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request as GoogleRequest
+from googleapiclient.discovery import build
 
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+# ---------------- Models ----------------
+class TaskBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    tags: List[str] = []
+    due_time: Optional[str] = None
+    estimated_minutes: int = 25
+    recurring: bool = False
+    timer_mode: str = "countdown"
+    order: int = 0
+
+
+class TaskCreate(TaskBase):
+    pass
+
+
+class Task(TaskBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed: bool = False
+    elapsed_seconds: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    completed_at: Optional[str] = None
+    gcal_event_id: Optional[str] = None
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
+class TaskUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    tags: Optional[List[str]] = None
+    due_time: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+    recurring: Optional[bool] = None
+    timer_mode: Optional[str] = None
+    order: Optional[int] = None
+    completed: Optional[bool] = None
+    elapsed_seconds: Optional[int] = None
+    completed_at: Optional[str] = None
+    gcal_event_id: Optional[str] = None
+
+
+class SessionLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    task_id: str
+    seconds: int
+    mode: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SessionCreate(BaseModel):
+    task_id: str
+    seconds: int
+    mode: str
+
+
+class ShoppingItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    qty: str = "1"
+    category: str = "general"
+    purchased: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ShoppingCreate(BaseModel):
+    name: str
+    qty: str = "1"
+    category: str = "general"
+
+
+class ShoppingUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    name: Optional[str] = None
+    qty: Optional[str] = None
+    category: Optional[str] = None
+    purchased: Optional[bool] = None
+
+
+class MeTimeItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    duration_minutes: int = 5
+    icon: str = "heart"
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class MeTimeCreate(BaseModel):
+    title: str
+    duration_minutes: int = 5
+    icon: str = "heart"
+
+
+class MeTimeUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    icon: Optional[str] = None
+
+
+# Monthly Goals (5 lists: goals, skills, books, movies, places)
+ALLOWED_LIST_TYPES = {"goals", "skills", "books", "movies", "places"}
+
+
+class MonthlyItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    list_type: str
+    title: str
+    checked: bool = False
+    order: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class MonthlyItemCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    list_type: str
+    title: str
+
+
+class MonthlyItemUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: Optional[str] = None
+    checked: Optional[bool] = None
+    order: Optional[int] = None
+
+
+# ---------------- Task routes ----------------
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Task Scheduler API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api_router.get("/tasks", response_model=List[Task])
+async def list_tasks():
+    docs = await db.tasks.find({}, {"_id": 0}).sort("order", 1).to_list(2000)
+    return [Task(**d) for d in docs]
 
-# Include the router in the main app
+
+@api_router.post("/tasks", response_model=Task)
+async def create_task(payload: TaskCreate):
+    task = Task(**payload.model_dump())
+    await db.tasks.insert_one(task.model_dump())
+    return task
+
+
+@api_router.put("/tasks/{task_id}", response_model=Task)
+async def update_task(task_id: str, payload: TaskUpdate):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        existing = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Task not found")
+        return Task(**existing)
+    result = await db.tasks.find_one_and_update(
+        {"id": task_id}, {"$set": updates}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(404, "Task not found")
+    return Task(**result)
+
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str):
+    result = await db.tasks.delete_one({"id": task_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Task not found")
+    return {"ok": True}
+
+
+@api_router.post("/tasks/reorder")
+async def reorder_tasks(payload: List[dict]):
+    for item in payload:
+        await db.tasks.update_one({"id": item["id"]}, {"$set": {"order": item["order"]}})
+    return {"ok": True}
+
+
+# ---------------- Sessions & Stats ----------------
+@api_router.post("/sessions", response_model=SessionLog)
+async def log_session(payload: SessionCreate):
+    s = SessionLog(**payload.model_dump())
+    await db.sessions.insert_one(s.model_dump())
+    return s
+
+
+@api_router.get("/stats")
+async def get_stats():
+    today_str = date.today().isoformat()
+    all_tasks = await db.tasks.find({}, {"_id": 0}).to_list(2000)
+    total = len(all_tasks)
+    done = sum(1 for t in all_tasks if t.get("completed"))
+    completion_pct = round((done / total) * 100) if total else 0
+    sessions = await db.sessions.find({}, {"_id": 0}).to_list(5000)
+    today_seconds = sum(
+        s.get("seconds", 0) for s in sessions if s.get("created_at", "").startswith(today_str)
+    )
+    return {
+        "total_tasks": total,
+        "completed_tasks": done,
+        "completion_pct": completion_pct,
+        "seconds_today": today_seconds,
+        "total_sessions": len(sessions),
+    }
+
+
+# ---------------- Shopping list ----------------
+@api_router.get("/shopping", response_model=List[ShoppingItem])
+async def list_shopping():
+    docs = await db.shopping.find({}, {"_id": 0}).to_list(2000)
+    return [ShoppingItem(**d) for d in docs]
+
+
+@api_router.post("/shopping", response_model=ShoppingItem)
+async def create_shopping(payload: ShoppingCreate):
+    item = ShoppingItem(**payload.model_dump())
+    await db.shopping.insert_one(item.model_dump())
+    return item
+
+
+@api_router.put("/shopping/{item_id}", response_model=ShoppingItem)
+async def update_shopping(item_id: str, payload: ShoppingUpdate):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        existing = await db.shopping.find_one({"id": item_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Item not found")
+        return ShoppingItem(**existing)
+    result = await db.shopping.find_one_and_update(
+        {"id": item_id}, {"$set": updates}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(404, "Item not found")
+    return ShoppingItem(**result)
+
+
+@api_router.delete("/shopping/{item_id}")
+async def delete_shopping(item_id: str):
+    res = await db.shopping.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Item not found")
+    return {"ok": True}
+
+
+# ---------------- Me Time ----------------
+DEFAULT_ME_TIME = [
+    {"title": "Deep breathing", "duration_minutes": 3, "icon": "wind"},
+    {"title": "Stretch break", "duration_minutes": 5, "icon": "activity"},
+    {"title": "Tea ritual", "duration_minutes": 10, "icon": "coffee"},
+    {"title": "Walk outside", "duration_minutes": 15, "icon": "footprints"},
+    {"title": "Mindful pause", "duration_minutes": 5, "icon": "heart"},
+]
+
+
+async def _seed_me_time():
+    count = await db.me_time.count_documents({})
+    if count == 0:
+        for item in DEFAULT_ME_TIME:
+            obj = MeTimeItem(**item)
+            await db.me_time.insert_one(obj.model_dump())
+
+
+@api_router.get("/me-time", response_model=List[MeTimeItem])
+async def list_me_time():
+    await _seed_me_time()
+    docs = await db.me_time.find({}, {"_id": 0}).to_list(500)
+    return [MeTimeItem(**d) for d in docs]
+
+
+@api_router.post("/me-time", response_model=MeTimeItem)
+async def create_me_time(payload: MeTimeCreate):
+    item = MeTimeItem(**payload.model_dump())
+    await db.me_time.insert_one(item.model_dump())
+    return item
+
+
+@api_router.put("/me-time/{item_id}", response_model=MeTimeItem)
+async def update_me_time(item_id: str, payload: MeTimeUpdate):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        existing = await db.me_time.find_one({"id": item_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Item not found")
+        return MeTimeItem(**existing)
+    result = await db.me_time.find_one_and_update(
+        {"id": item_id}, {"$set": updates}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(404, "Item not found")
+    return MeTimeItem(**result)
+
+
+@api_router.delete("/me-time/{item_id}")
+async def delete_me_time(item_id: str):
+    res = await db.me_time.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Item not found")
+    return {"ok": True}
+
+
+# ---------------- Quote of the day (proxy ZenQuotes; cache 24h) ----------------
+_QUOTE_CACHE = {"date": None, "data": None}
+
+
+# ---------------- Monthly Goals ----------------
+def _validate_list_type(lt: str):
+    if lt not in ALLOWED_LIST_TYPES:
+        raise HTTPException(400, f"Invalid list_type. Must be one of {sorted(ALLOWED_LIST_TYPES)}")
+
+
+@api_router.get("/monthly-goals", response_model=List[MonthlyItem])
+async def list_monthly(list_type: Optional[str] = None):
+    query = {}
+    if list_type:
+        _validate_list_type(list_type)
+        query["list_type"] = list_type
+    docs = await db.monthly_goals.find(query, {"_id": 0}).sort("order", 1).to_list(2000)
+    return [MonthlyItem(**d) for d in docs]
+
+
+@api_router.post("/monthly-goals", response_model=MonthlyItem)
+async def create_monthly(payload: MonthlyItemCreate):
+    _validate_list_type(payload.list_type)
+    count = await db.monthly_goals.count_documents({"list_type": payload.list_type})
+    item = MonthlyItem(list_type=payload.list_type, title=payload.title, order=count)
+    await db.monthly_goals.insert_one(item.model_dump())
+    return item
+
+
+@api_router.put("/monthly-goals/{item_id}", response_model=MonthlyItem)
+async def update_monthly(item_id: str, payload: MonthlyItemUpdate):
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        existing = await db.monthly_goals.find_one({"id": item_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Item not found")
+        return MonthlyItem(**existing)
+    result = await db.monthly_goals.find_one_and_update(
+        {"id": item_id}, {"$set": updates}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(404, "Item not found")
+    return MonthlyItem(**result)
+
+
+@api_router.delete("/monthly-goals/{item_id}")
+async def delete_monthly(item_id: str):
+    res = await db.monthly_goals.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Item not found")
+    return {"ok": True}
+
+
+@api_router.get("/quote/today")
+async def quote_today():
+    today_iso = date.today().isoformat()
+    if _QUOTE_CACHE.get("date") == today_iso and _QUOTE_CACHE.get("data"):
+        return _QUOTE_CACHE["data"]
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as c:
+            r = await c.get("https://zenquotes.io/api/today")
+            arr = r.json()
+        if isinstance(arr, list) and arr:
+            data = {"text": arr[0].get("q", ""), "author": arr[0].get("a", "Unknown")}
+        else:
+            raise ValueError("bad response")
+    except Exception as e:
+        logging.warning(f"ZenQuotes failed: {e}")
+        data = {
+            "text": "Be so good they can't ignore you.",
+            "author": "Steve Martin",
+        }
+    _QUOTE_CACHE["date"] = today_iso
+    _QUOTE_CACHE["data"] = data
+    return data
+
+
+# ---------------- Google Calendar OAuth ----------------
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+BACKEND_BASE = os.environ.get("BACKEND_PUBLIC_URL", "")  # full https URL for OAuth redirect
+FRONTEND_BASE = os.environ.get("FRONTEND_PUBLIC_URL", "")
+REDIRECT_URI = f"{BACKEND_BASE}/api/oauth/calendar/callback"
+SCOPES = ["https://www.googleapis.com/auth/calendar", "openid", "email", "profile"]
+
+
+def _gcreds_configured() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and BACKEND_BASE)
+
+
+@api_router.get("/google/status")
+async def google_status(email: Optional[str] = None):
+    if not _gcreds_configured():
+        return {"configured": False, "connected": False}
+    if not email:
+        return {"configured": True, "connected": False}
+    user = await db.gcal_users.find_one({"email": email}, {"_id": 0})
+    return {"configured": True, "connected": bool(user and user.get("google_tokens"))}
+
+
+@api_router.get("/oauth/calendar/login")
+async def google_login():
+    if not _gcreds_configured():
+        raise HTTPException(503, "Google credentials not configured on server")
+    from google_auth_oauthlib.flow import Flow
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI,
+    )
+    url, _state = flow.authorization_url(access_type="offline", prompt="consent", include_granted_scopes="true")
+    return {"authorization_url": url}
+
+
+@api_router.get("/oauth/calendar/callback")
+async def google_callback(code: str):
+    if not _gcreds_configured():
+        raise HTTPException(503, "Google credentials not configured on server")
+    token_resp = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+        },
+        timeout=10,
+    ).json()
+    if "access_token" not in token_resp:
+        raise HTTPException(400, f"Token exchange failed: {token_resp}")
+    user = requests.get(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        headers={"Authorization": f"Bearer {token_resp['access_token']}"},
+        timeout=10,
+    ).json()
+    email = user.get("email")
+    await db.gcal_users.update_one(
+        {"email": email},
+        {"$set": {"google_tokens": token_resp, "name": user.get("name", ""), "picture": user.get("picture", "")}},
+        upsert=True,
+    )
+    target = FRONTEND_BASE or "/"
+    return RedirectResponse(f"{target}?gcal_email={email}")
+
+
+async def _get_creds(email: str) -> Credentials:
+    rec = await db.gcal_users.find_one({"email": email})
+    if not rec or "google_tokens" not in rec:
+        raise HTTPException(401, "Google not connected")
+    tokens = rec["google_tokens"]
+    creds = Credentials(
+        token=tokens.get("access_token"),
+        refresh_token=tokens.get("refresh_token"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=SCOPES,
+    )
+    if creds.expired and creds.refresh_token:
+        creds.refresh(GoogleRequest())
+        await db.gcal_users.update_one(
+            {"email": email}, {"$set": {"google_tokens.access_token": creds.token}}
+        )
+    return creds
+
+
+@api_router.get("/calendar/events")
+async def calendar_events(email: str):
+    creds = await _get_creds(email)
+    service = build("calendar", "v3", credentials=creds)
+    now = datetime.now(timezone.utc).isoformat()
+    end = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+    res = service.events().list(
+        calendarId="primary", timeMin=now, timeMax=end, maxResults=50, singleEvents=True, orderBy="startTime"
+    ).execute()
+    return {"items": res.get("items", [])}
+
+
+class CalendarEventCreate(BaseModel):
+    email: str
+    task_id: str
+
+
+@api_router.post("/calendar/push")
+async def calendar_push(payload: CalendarEventCreate):
+    task = await db.tasks.find_one({"id": payload.task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(404, "Task not found")
+    creds = await _get_creds(payload.email)
+    service = build("calendar", "v3", credentials=creds)
+
+    today = date.today()
+    hh, mm = (8, 0)
+    if task.get("due_time"):
+        try:
+            hh, mm = [int(x) for x in task["due_time"].split(":")[:2]]
+        except Exception:
+            pass
+    start_dt = datetime(today.year, today.month, today.day, hh, mm, tzinfo=timezone.utc)
+    end_dt = start_dt + timedelta(minutes=task.get("estimated_minutes") or 25)
+
+    body = {
+        "summary": task["title"],
+        "description": task.get("description") or "From My Day app",
+        "start": {"dateTime": start_dt.isoformat()},
+        "end": {"dateTime": end_dt.isoformat()},
+    }
+    if task.get("gcal_event_id"):
+        ev = service.events().update(calendarId="primary", eventId=task["gcal_event_id"], body=body).execute()
+    else:
+        ev = service.events().insert(calendarId="primary", body=body).execute()
+        await db.tasks.update_one({"id": payload.task_id}, {"$set": {"gcal_event_id": ev.get("id")}})
+    return {"ok": True, "event": ev}
+
+
+@api_router.post("/google/disconnect")
+async def google_disconnect(email: str):
+    await db.gcal_users.delete_one({"email": email})
+    return {"ok": True}
+
+
+# ---------------- App wiring ----------------
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

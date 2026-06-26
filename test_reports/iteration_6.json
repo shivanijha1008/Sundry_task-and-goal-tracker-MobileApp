@@ -1,0 +1,20 @@
+{
+  "summary": "Frontend-only smoke test for ShareStreakButton (iteration 6). Verified that share-streak-wrap renders under SmartSuggestions on Tasks tab, both share and download buttons trigger PNG download (lumora-streak.png) without crash. No regression detected on streak-badge or smart-suggestions. No console/page errors.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "share-streak-wrap is visible on Tasks tab",
+    "smart-suggestions still renders (no regression)",
+    "streak-badge still renders (no regression)",
+    "download-streak-btn click triggers PNG download (filename=lumora-streak.png)",
+    "share-streak-btn click in headless browser falls back to download (filename=lumora-streak.png) — no crash",
+    "No .error elements or page errors after interactions"
+  ],
+  "failed": [],
+  "action_items": [
+    "Minor (non-blocking): bottom-nav tab testids tab-tasks/tab-shopping/tab-metime were not found in DOM — tabs likely use different testid naming. Not part of this iteration's scope but worth standardizing in a future pass."
+  ],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "test_credentials": "not required for this feature"
+}

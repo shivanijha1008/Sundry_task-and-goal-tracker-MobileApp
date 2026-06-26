@@ -1,0 +1,80 @@
+{
+  "theme": "Light/Dark Toggle",
+  "archetype": "Neo-Brutalism Bold & Colorful",
+  "typography": {
+    "headings": {
+      "family": "Cabinet Grotesk, sans-serif",
+      "weights": ["800", "900"],
+      "usage": "Use for timer digits, section headers, and primary CTAs. Tight letter spacing."
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "weights": ["400", "600", "700"],
+      "usage": "Use for task descriptions, tags, and secondary text."
+    }
+  },
+  "colors": {
+    "light": {
+      "background": "#FDFBF7",
+      "text": "#0A0A0A",
+      "primary": "#FFCC00",
+      "secondary": "#FF3366",
+      "accent": "#00CC66",
+      "surface": "#FFFFFF",
+      "border": "#0A0A0A"
+    },
+    "dark": {
+      "background": "#0A0A0A",
+      "text": "#FDFBF7",
+      "primary": "#FFCC00",
+      "secondary": "#FF3366",
+      "accent": "#00CC66",
+      "surface": "#1A1A1A",
+      "border": "#FDFBF7"
+    }
+  },
+  "visual_enhancers": {
+    "borders": "Thick 2px-4px solid borders on all cards, buttons, and inputs.",
+    "shadows": "Hard offset shadows: shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] in light mode, shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] in dark mode.",
+    "border_radius": "Subtle roundness (rounded-lg) combined with harsh shadows.",
+    "hover_states": "Interactive elements should translate down and right (translate-x-[2px] translate-y-[2px]) and reduce shadow offset to simulate physical pressing."
+  },
+  "layout": {
+    "grid": "Asymmetric Bento Grid. Use varying col-spans and row-spans.",
+    "spacing": "Generous spacing. p-6 or p-8 inside cards to prevent text from touching thick borders. gap-6 or gap-8 between grid items.",
+    "timer_visualization": "The active timer must be the dominant hero element. Use massive typography (text-6xl+ or fluid clamp) and a bold, contrasting background card (e.g., Hot Pink or Cyber Yellow). Consider a visual shrinking progress bar that wraps the card."
+  },
+  "components": {
+    "task_card": "Solid color block (based on priority/status) with hard black/white borders. Interactive drag handle.",
+    "timer": "Massive numeric display, distinct Play/Pause buttons with 'Gumroad' style hard shadows.",
+    "progress_dashboard": "Chunky progress bars with thick outlines, large bold percentages.",
+    "modal": "High contrast overlay (backdrop-blur with dark tint), modal window with thick border and offset shadow."
+  },
+  "media": [
+    {
+      "category": "empty_state",
+      "url": "https://images.unsplash.com/photo-1710244182004-1c708b3f146d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHwzZCUyMGFic3RyYWN0JTIwc2hhcGUlMjBjb2xvcmZ1bCUyMG5lbyUyMGJydXRhbGlzbXxlbnwwfHx8fDE3ODI0NjQ1NDB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "3D abstract yellow and pink shapes for 'No tasks today' empty state illustration."
+    },
+    {
+      "category": "user_avatar",
+      "url": "https://images.unsplash.com/photo-1604261605115-4b34b646a05c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwxfHxwb3J0cmFpdCUyMHlvdW5nJTIwY3JlYXRpdmUlMjBwcm9mZXNzaW9uYWwlMjBwb3AlMjBjb2xvciUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzgyNDY0NTQ2fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Avatar for the user profile section in the header."
+    }
+  ],
+  "accessibility": {
+    "contrast": "Extremely high contrast by default due to Neo-Brutalist borders and stark text colors.",
+    "motion": "Respect prefers-reduced-motion for the timer shrinking animations."
+  },
+  "testing": {
+    "data_testid_rules": "All interactive elements (buttons, inputs, drag handles, timer controls) MUST include a data-testid attribute in kebab-case."
+  },
+  "instructions_to_main_agent": [
+    "Implement a robust offline sync mechanism using IndexedDB or localStorage, syncing with MongoDB when the navigator is online.",
+    "Build the UI using pure Tailwind classes for the Neo-Brutalist look. Override Shadcn component styles heavily to remove their default soft shadows and rounded edges, replacing them with border-2 border-black (or border-white in dark mode) and offset shadows like shadow-[4px_4px_0px_0px_rgba(0,0,0,1)].",
+    "Use @hello-pangea/dnd or similar for drag-and-drop task reordering.",
+    "The active timer should be a prominent, large widget that stays visible. Include options to switch between Countdown, Pomodoro (25/5), and Stopwatch modes.",
+    "Use 'lucide-react' for bold, clear icons with thicker stroke-width if possible.",
+    "Implement a strict Dark Mode toggle that swaps the background to #0A0A0A, text to #FDFBF7, and border/shadows to white/light grey, while keeping the vibrant accent colors."
+  ]
+}

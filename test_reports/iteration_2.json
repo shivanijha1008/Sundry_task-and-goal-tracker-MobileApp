@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 2 smoke test. Backend endpoints all healthy (quote, shopping CRUD, me-time seed+CRUD, tasks, google/status, oauth/calendar/login 503). Frontend loads with quote banner, stats, bottom nav, and tasks work end-to-end (add via modal-save-btn, share modal with correct hrefs, gcal click handled, reload persistence). CRITICAL: Shopping and Me Time pages crash on add/toggle/remove due to prop-wiring mismatch in App.js (hooks return add/toggle/remove but pages destructure onAdd/onToggle/onRemove). The resulting runtime error pops the webpack-dev-server overlay which blocks any further UI interaction until reload.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/quote/today -> 200 {text, author=Voltaire}",
+    "GET /api/google/status -> 200 {configured:false, connected:false}",
+    "GET /api/oauth/calendar/login -> 503 'Google credentials not configured' (expected)",
+    "GET /api/me-time -> 200 auto-seeded 5 default rituals (Deep breathing, Stretch break, Tea ritual, Walk outside, Mindful pause)",
+    "Shopping CRUD via API: POST/PUT/DELETE /api/shopping all return 200",
+    "GET /api/tasks -> 200 (no regression)",
+    "Frontend loads quote-banner with text + author",
+    "Bottom nav exposes nav-tasks-btn, nav-shopping-btn, nav-metime-btn, nav-timer-btn, nav-calendar-btn",
+    "add-task-btn opens task-form-modal; modal-save-btn creates new task card",
+    "share-task-{id} opens share-modal; share-whatsapp/telegram/sms/email-btn have correct external URL hrefs (wa.me, t.me/share/url, sms:, mailto:)",
+    "gcal-task-{id} click does not crash (toast shown as expected when not configured)",
+    "Task persistence across full page reload (tasks survived reload via backend)"
+  ],
+  "failed": [
+    {
+      "area": "Shopping page UI",
+      "issue": "Adding a shopping item triggers 'TypeError: onAdd is not a function' in ShoppingPage submit. Root cause: App.js does `<ShoppingPage {...shopping} />` but useShopping returns {items, add, toggle, remove, clearPurchased} while ShoppingPage destructures {onAdd, onToggle, onRemove, onClearPurchased}.",
+      "evidence": "Runtime error overlay captured: 'onAdd is not a function at submit (ShoppingPage)'. Fix: map props in App.js e.g. <ShoppingPage items={shopping.items} onAdd={shopping.add} onToggle={shopping.toggle} onRemove={shopping.remove} onClearPurchased={shopping.clearPurchased} />",
+      "priority": "HIGH"
+    },
+    {
+      "area": "Me Time page UI",
+      "issue": "Same prop-wiring bug: App.js does `<MeTimePage {...meTime} />`. useMeTime returns {items, add, update, remove} but MeTimePage destructures {items, onAdd, onUpdate, onRemove}. metime-add-btn, metime-edit-{id}, metime-remove-{id} will all throw 'onX is not a function'.",
+      "evidence": "Code inspection: /app/frontend/src/App.js:254 vs /app/frontend/src/pages/MeTimePage.jsx:75 and /app/frontend/src/hooks/useMeTime.js:96. Could not reach the page in UI test because webpack-dev-server-client-overlay (triggered by the Shopping crash) intercepted all subsequent clicks; bug confirmed statically.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "In /app/frontend/src/App.js, replace spread props with explicit mapping for ShoppingPage: items={shopping.items} onAdd={shopping.add} onToggle={shopping.toggle} onRemove={shopping.remove} onClearPurchased={shopping.clearPurchased}.",
+    "In /app/frontend/src/App.js, do the same for MeTimePage: items={meTime.items} onAdd={meTime.add} onUpdate={meTime.update} onRemove={meTime.remove}.",
+    "After fix, retest: shopping add/toggle/remove, metime add/edit/remove, breather overlay (metime-start -> breather-overlay + breather-toggle-btn + breather-close-btn), nav-timer-btn -> timer-widget, nav-calendar-btn -> calendar-not-configured + gcal-connect-btn toast.",
+    "Optional: verify localStorage offline persistence for scheduler.shopping.v1 and scheduler.metime.v1 after fix."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~55% (tasks/share/quote/nav OK; shopping+metime broken; timer/calendar pages not reachable in this run due to overlay block but components themselves appear wired correctly)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}

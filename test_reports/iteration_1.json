@@ -1,0 +1,40 @@
+{
+  "summary": "First-finish smoke test of Daily Offline Task Scheduler. Backend CRUD, reorder, sessions, stats all green. Frontend hero, theme toggle (dark + ls), task creation modal, priority badge, duration, tags, recurring icon, completion toggle, TimerWidget (10:00 -> 09:58 tick verified), search/filter, edit prefill, delete, drag-handle, stats panel and localStorage offline persistence all verified end-to-end via Playwright against public REACT_APP_BACKEND_URL.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/tasks -> 200 [] initially",
+    "POST /api/tasks creates task with all fields, returns id, completed=false, elapsed_seconds=0",
+    "PUT /api/tasks/{id} sets completed=true",
+    "POST /api/tasks/reorder -> {ok:true}",
+    "POST /api/sessions logs seconds/mode",
+    "GET /api/stats returns total_tasks/completed_tasks/completion_pct/seconds_today/total_sessions",
+    "DELETE /api/tasks/{id} -> {ok:true}; bogus id -> 404",
+    "Frontend loads, TODAY's GRIND header, online-status, theme-toggle-btn visible",
+    "Theme toggle adds 'dark' class to <html> and persists in localStorage (scheduler.theme.v1=dark)",
+    "task-form-modal opens, fields fill, modal-save-btn creates a card with priority badge, duration (10m), tag chips and daily icon when recurring",
+    "toggle-task-{id} applies line-through to title",
+    "start-timer-{id} opens timer-widget, timer-play-pause-btn ticks countdown 10:00 -> 09:58 in 2s",
+    "timer-reset-btn and timer-close-btn work",
+    "search-input filters cards by title/tag (1 match / 0 non-match)",
+    "filter-all/active/done-btn all clickable",
+    "edit-task-{id} reopens modal pre-filled; save updates card",
+    "drag-handle-{id} present and visible",
+    "Stats panel shows stat-completed, stat-progress, stat-time, stat-remaining values",
+    "localStorage 'scheduler.tasks.v1' populated; after page reload task card still renders (offline cache)",
+    "delete-task-{id} removes the card and shows 'Task removed' toast"
+  ],
+  "failed": [
+    {
+      "area": "frontend/empty-state",
+      "issue": "After deleting the last task the [data-testid='empty-state'] block did not become visible (list area was empty but the empty-state element not rendered immediately after delete).",
+      "evidence": "page.locator('[data-testid=\"empty-state\"]').is_visible() returned False right after delete (toast 'Task removed' was shown, no task cards present).",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Optional: ensure EmptyState renders when filtered list becomes 0 (not only on initial load) so users see the friendly empty-state CTA after deleting their last task."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~96%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

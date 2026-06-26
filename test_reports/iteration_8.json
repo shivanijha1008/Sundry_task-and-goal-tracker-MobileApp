@@ -1,0 +1,45 @@
+{
+  "summary": "Phase 1 (Monthly Goals) + Phase 2 (Speech-to-text mic buttons) tested end-to-end. Backend: 12/12 pytest cases pass — Monthly Goals CRUD, list_type validation (400 on invalid), filter, auto-incremented order, 404 on unknown id; existing endpoints (/api/tasks, /api/shopping, /api/me-time, /api/quote/today) still healthy. Frontend: 5-tab bottom nav, monthly-goals-page with 5 collapsible sections, all required mic buttons present (mic-search, mic-task-title, mic-task-description, mic-shopping-name, mic-metime-title, mic-diary-text, mic-monthly-add-{listType}, mic-monthly-edit-{id}). Add/toggle/edit (save+cancel)/remove and reload persistence all work. One CRITICAL backend-sync bug found: useMonthlyGoals.add() generates a client-side UUID but doesn't replace it with the server's response id, so any update/toggle/delete done BEFORE a page reload PUTs/DELETEs against a non-existent server id (404). UX still works because of optimistic localStorage but server state desyncs (the originally-created item stays unmodified server-side; deletes don't remove it server-side until reload re-fetches and re-uses the right id).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Monthly Goals create → toggle/edit/remove (same session, no reload)",
+        "issue": "useMonthlyGoals.add() generates a local UUID and POSTs only {list_type,title}. The server creates the item with its OWN uuid. The local item keeps the wrong id, so subsequent api.updateMonthly(localId,...) / api.deleteMonthly(localId) calls return 404 (visible in console as '[monthly] update failed: Request failed with status code 404' and '[monthly] delete failed: ... 404'). Visually fine because localStorage is optimistic, but server-side the originally-created row is never updated/deleted in this session. After reload, list refresh replaces local state with server data and ids become correct.",
+        "affected_selectors": ["monthly-toggle-{id}", "monthly-edit-save-{id}", "monthly-remove-{id}"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_monthly_goals.py",
+    "/app/test_reports/pytest/iter8_results.xml"
+  ],
+  "action_items": [
+    "Fix useMonthlyGoals.add(): await api.createMonthly(...) and replace the optimistic local item's id with the server response.id (e.g., persist(prev.map(i => i._tempId===tmpId ? {...i, id: server.id} : i))). Alternatively, accept a client-provided id in POST /api/monthly-goals and pass the local uuid. This will eliminate the 404 console errors and guarantee server-side state stays in sync without requiring a reload.",
+    "(Optional UX) Show a small unsynced indicator or auto-resync queue for offline-created items so they aren't lost if the user never reloads while online.",
+    "(Optional) Aria-label tabs in BottomNav for accessibility."
+  ],
+  "critical_code_review_comments": [
+    "useMonthlyGoals.js add(): optimistic UUID is never reconciled with server id → silent desync (described above).",
+    "Same pattern should be audited in useShopping/useMeTime hooks if they also generate client-side ids (verify they either echo server id back or rely on full re-list).",
+    "server.py /api/monthly-goals POST does not accept a client-supplied id — consider accepting payload.id (validated as uuid) to make optimistic sync trivial."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_monthly_goals.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12)",
+    "frontend": "~95% (all UI flows work; one server-sync bug behind localStorage)"
+  },
+  "test_credentials": "N/A (no auth in this iteration)",
+  "seed_data_creation": "Tests create TEST_* prefixed items and clean them up via DELETE in fixtures.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite is at /app/backend/tests/test_monthly_goals.py (run: pytest -v). For Monthly Goals UI: testids follow monthly-section-{type}, monthly-section-toggle-{type}, monthly-add-input-{type}, monthly-add-btn-{type}, monthly-item-{id}, monthly-toggle-{id}, monthly-edit-{id}, monthly-edit-input-{id}, monthly-edit-save-{id}, monthly-edit-cancel-{id}, monthly-remove-{id}, mic-monthly-add-{type}. NOTE: Playwright headless Chromium DOES expose window.webkitSpeechRecognition, so the 'unsupported' fallback toast path does NOT trigger in this environment — instead the mic enters listening state (data-listening='true' + pink gradient). The fallback-toast code itself is correct; just don't assert on it from headless Chromium. To verify the fallback path, override window.SpeechRecognition/webkitSpeechRecognition to undefined via add_init_script before navigation.",
+  "rca_of_the_issue": "Root cause of the 404 sync errors: in /app/frontend/src/hooks/useMonthlyGoals.js add(), the locally-created item uses a uuid() generated client-side. The POST /api/monthly-goals call sends only {list_type,title} (per MonthlyItemCreate) and the backend generates its own uuid in MonthlyItem. The response is ignored — the local item is never updated with the server id. Therefore PUT/DELETE /api/monthly-goals/{localId} on that just-added item hits an id that doesn't exist server-side → 404. Repro: open Goals tab → add an item → immediately toggle/edit/remove it (without reload) → DevTools shows 404s for that item's PUT/DELETE. Fix: use server response: const created = await api.createMonthly({list_type, title: trimmed}); persist(prev => prev.map(i => i.id===localId ? {...i, id: created.id, order: created.order} : i)). Or have the backend accept a client-supplied id."
+}

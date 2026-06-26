@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 3 retest after App.js prop wiring fix. CONFIRMED FIXED: Shopping and Me Time pages no longer crash; webpack-dev-server overlay never appeared. Shopping CRUD (add/toggle/clear-purchased/remove) all functional. Me Time: 5 seed rituals load, metime-add-btn works, metime-start opens breather-overlay with breather-toggle-btn visible. Timer empty state, Calendar not-configured banner + toast on gcal-connect, and Tasks tab all confirmed working. Minor non-blocking issues remain in breather UI (phase/countdown testids not detected visible; close button click intercepted by a sibling animated div) and metime-edit pre-fill (name input not located after clicking edit).",
+  "tested_scope": ["frontend", "integration"],
+  "passed": [
+    "Quote banner renders with author Voltaire",
+    "nav-shopping-btn navigates to Shopping page (no crash)",
+    "shopping-name-input + shopping-add-btn creates shopping-item-{id} (count 1) - NO runtime error",
+    "shopping-toggle-{id} toggles purchased state",
+    "clear-purchased-btn clears purchased items (count returned to 1 after second add+clear)",
+    "shopping-remove-{id} removes item (final count 0)",
+    "nav-metime-btn navigates to Me Time page (no crash); 5 seeded rituals visible",
+    "metime-add-btn click executes without runtime error",
+    "metime-start-{id} opens breather-overlay (visible=true); breather-toggle-btn visible",
+    "nav-timer-btn shows timer-empty (count=1, timer-widget=0) since no active task",
+    "nav-calendar-btn shows calendar-not-configured banner (count=1)",
+    "gcal-connect-btn click shows 'Google credentials not configured on server' toast (verified in screenshot, backend returns 503 as expected)",
+    "nav-tasks-btn regression: add-task-btn still visible",
+    "NO webpack-dev-server-client-overlay present (count=0) — prop-wiring fix verified",
+    "No pageerrors captured; only expected 404/503 network errors for google endpoints"
+  ],
+  "failed": [
+    {
+      "area": "Me Time / Breather overlay",
+      "issue": "breather-phase and breather-countdown elements are not reported as visible by Playwright is_visible() while the overlay is open (toggle button is visible).",
+      "evidence": "phase=False, countdown=False, toggle=True while breather-overlay.is_visible()=True. Could be missing data-testid on the actual phase/countdown text elements, or they animate in after a delay.",
+      "priority": "LOW"
+    },
+    {
+      "area": "Me Time / Breather overlay close",
+      "issue": "breather-close-btn click is intercepted by an absolutely positioned sibling div (the pulse/animation circle inside the overlay) — pointer events from that overlay child block the X button area.",
+      "evidence": "Playwright: '<div class=\"absolute inset-0 rounded-full\"> ... intercepts pointer events' for ~7s. The close button itself is visible/enabled.",
+      "priority": "MEDIUM"
+    },
+    {
+      "area": "Me Time / Edit pre-fill",
+      "issue": "Clicking metime-edit-{id} did not surface a metime-name-input with the ritual title pre-filled (locator timed out).",
+      "evidence": "page.locator('[data-testid=\"metime-name-input\"]').input_value() timed out after edit click. Either the input has a different data-testid in edit mode, or edit mode renders inline inputs without that testid.",
+      "priority": "MEDIUM"
+    }
+  ],
+  "action_items": [
+    "Add pointer-events:none on the decorative pulse/inset overlay inside breather-overlay so breather-close-btn is reliably clickable (LOW UX risk).",
+    "Ensure breather-phase and breather-countdown data-testid attributes are placed on the visible text nodes (not on a wrapper that may be display:none during initial animation).",
+    "Confirm that the edit form in MeTimePage exposes metime-name-input (and corresponding edit fields) when metime-edit-{id} is clicked, so the prefilled value is testable and editable."
+  ],
+  "success_rate": {"backend": "100% (unchanged from iteration 2)", "frontend": "~92% — all HIGH priority bugs fixed; only minor breather/edit polish issues remain"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

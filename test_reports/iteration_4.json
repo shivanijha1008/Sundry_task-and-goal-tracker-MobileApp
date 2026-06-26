@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 4 frontend verification. Bottom nav, task card horizontal action row, shopping unit/category selects, category grouping, and Unbounded font all WORK. However, page title not updated, LUMORA brand pill missing in tasks header, and google-signin-btn missing from tasks header.",
+  "tested_scope": ["frontend"],
+  "passed": [
+    "Bottom nav has exactly 4 buttons (nav-tasks-btn, nav-shopping-btn, nav-metime-btn, nav-calendar-btn); nav-timer-btn absent (count=0)",
+    "Task card action icons (start-timer, share-task, gcal-task, edit-task, delete-task) all present and horizontally aligned at same Y (y=589 for all 5 testids)",
+    "Shopping page has shopping-unit-select and shopping-category-select dropdowns; unit options include kg",
+    "Adding shopping item via shopping-name-input + shopping-qty-input + shopping-unit-select + shopping-add-btn creates shopping-item-* and displays '2 kg' for Milk",
+    "Shopping items grouped visually by category ('GENERAL · 6' header visible)",
+    "shopping-name-input, shopping-qty-input, shopping-add-btn all functional",
+    "'My Day' h1 computed font-family is 'Unbounded, sans-serif'",
+    "Me Time and Calendar pages load (navigation works)"
+  ],
+  "failed": [
+    {"area": "Frontend / index.html", "issue": "Page <title> is 'Emergent | Fullstack App' instead of required 'Lumora — Your Day, Lit Up'", "evidence": "page.title() returned 'Emergent | Fullstack App'", "priority": "HIGH"},
+    {"area": "Frontend / Tasks header", "issue": "LUMORA brand pill not rendered. Required by spec.", "evidence": "page.locator('text=LUMORA').count() == 0; screenshot shows header with only 'FRIDAY, JUNE 26' + 'My Day' + Online pill + Add Task", "priority": "HIGH"},
+    {"area": "Frontend / Tasks header", "issue": "google-signin-btn not rendered in tasks header. Spec requires button visible when not connected.", "evidence": "page.locator('[data-testid=\"google-signin-btn\"]').count() == 0", "priority": "HIGH"},
+    {"area": "Frontend / Shopping page", "issue": "clear-purchased-btn not found on shopping page (testid missing)", "evidence": "page.locator('[data-testid=\"clear-purchased-btn\"]').count() == 0 even when items exist", "priority": "MEDIUM"}
+  ],
+  "action_items": [
+    "Update /app/frontend/public/index.html <title> to 'Lumora — Your Day, Lit Up'",
+    "Verify LUMORA brand pill is actually rendered in tasks header in App.js (currently invisible/not in DOM)",
+    "Ensure GoogleSignInButton component renders with data-testid='google-signin-btn' in the tasks header when not connected",
+    "Add data-testid='clear-purchased-btn' to clear-purchased control on ShoppingPage (or render it conditionally with that id)"
+  ],
+  "success_rate": {"backend": "not_tested", "frontend": "70%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
