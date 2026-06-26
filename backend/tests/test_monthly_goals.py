@@ -136,3 +136,88 @@ class TestRegression:
         assert r.status_code == 200
         d = r.json()
         assert "text" in d and "author" in d
+
+
+
+# ---------------- Iter 10: month_key feature ----------------
+class TestMonthKey:
+    def test_existing_items_have_month_key(self, client):
+        """All existing items must have month_key (migration backfilled to '2026-06')."""
+        r = client.get(f"{API}/monthly-goals", timeout=10)
+        assert r.status_code == 200
+        items = r.json()
+        for it in items:
+            assert "month_key" in it
+            assert it["month_key"], f"Empty month_key on item {it.get('id')}"
+
+    def test_months_endpoint(self, client):
+        r = client.get(f"{API}/monthly-goals/months", timeout=10)
+        assert r.status_code == 200
+        months = r.json()
+        assert isinstance(months, list)
+        # always includes current month
+        keys = [m["month_key"] for m in months]
+        assert any(k for k in keys), "No months returned"
+        # sorted desc
+        assert keys == sorted(keys, reverse=True)
+        # each entry shape
+        for m in months:
+            assert "month_key" in m and "count" in m
+            assert isinstance(m["count"], int)
+
+    def test_filter_by_month_key_empty(self, client):
+        r = client.get(f"{API}/monthly-goals?month_key=1999-01", timeout=10)
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_filter_by_month_key_current(self, client):
+        """Current month should have items (the migrated ones)."""
+        # Get months list to find current
+        months_resp = client.get(f"{API}/monthly-goals/months", timeout=10)
+        months = months_resp.json()
+        assert months, "expected at least one month"
+        current = months[0]["month_key"]
+        r = client.get(f"{API}/monthly-goals?month_key={current}", timeout=10)
+        assert r.status_code == 200
+        items = r.json()
+        for it in items:
+            assert it["month_key"] == current
+
+    def test_create_with_explicit_month_key(self, client, cleanup_ids):
+        target_month = "2026-07"
+        r = client.post(
+            f"{API}/monthly-goals",
+            json={"list_type": "goals", "title": "TEST_july_goal", "month_key": target_month},
+            timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["month_key"] == target_month
+        cleanup_ids.append(data["id"])
+
+        # Verify it shows up only when filtering by that month
+        r2 = client.get(f"{API}/monthly-goals?month_key={target_month}", timeout=10)
+        assert any(it["id"] == data["id"] for it in r2.json())
+
+        # Verify it also appears in /months endpoint
+        m = client.get(f"{API}/monthly-goals/months", timeout=10).json()
+        assert any(x["month_key"] == target_month for x in m)
+
+    def test_create_without_month_key_uses_default(self, client, cleanup_ids):
+        r = client.post(
+            f"{API}/monthly-goals",
+            json={"list_type": "skills", "title": "TEST_default_month"},
+            timeout=10,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        cleanup_ids.append(data["id"])
+        # month_key follows YYYY-MM pattern
+        assert len(data["month_key"]) == 7 and data["month_key"][4] == "-"
+
+
+# ---------------- Auth regression: 401 without token ----------------
+class TestAuthRegression:
+    def test_auth_me_401_without_token(self, client):
+        r = client.get(f"{API}/auth/me", timeout=10)
+        assert r.status_code == 401

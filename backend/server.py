@@ -138,6 +138,11 @@ class MeTimeUpdate(BaseModel):
 ALLOWED_LIST_TYPES = {"goals", "skills", "books", "movies", "places"}
 
 
+def current_month_key() -> str:
+    now = datetime.now(timezone.utc)
+    return f"{now.year:04d}-{now.month:02d}"
+
+
 class MonthlyItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -145,6 +150,7 @@ class MonthlyItem(BaseModel):
     title: str
     checked: bool = False
     order: int = 0
+    month_key: str = Field(default_factory=current_month_key)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -152,6 +158,7 @@ class MonthlyItemCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
     list_type: str
     title: str
+    month_key: Optional[str] = None
 
 
 class MonthlyItemUpdate(BaseModel):
@@ -159,6 +166,7 @@ class MonthlyItemUpdate(BaseModel):
     title: Optional[str] = None
     checked: Optional[bool] = None
     order: Optional[int] = None
+    month_key: Optional[str] = None
 
 
 # Auth (Emergent-managed Google Auth)
@@ -356,20 +364,51 @@ def _validate_list_type(lt: str):
 
 
 @api_router.get("/monthly-goals", response_model=List[MonthlyItem])
-async def list_monthly(list_type: Optional[str] = None):
+async def list_monthly(list_type: Optional[str] = None, month_key: Optional[str] = None):
     query = {}
     if list_type:
         _validate_list_type(list_type)
         query["list_type"] = list_type
+    if month_key:
+        query["month_key"] = month_key
     docs = await db.monthly_goals.find(query, {"_id": 0}).sort("order", 1).to_list(2000)
-    return [MonthlyItem(**d) for d in docs]
+    out = []
+    for d in docs:
+        # Backfill month_key for legacy docs (defensive — also migrated on startup)
+        if not d.get("month_key"):
+            d["month_key"] = current_month_key()
+        out.append(MonthlyItem(**d))
+    return out
+
+
+@api_router.get("/monthly-goals/months")
+async def list_monthly_months():
+    """Return the months that have any goal items, sorted desc (newest first)."""
+    pipeline = [
+        {"$group": {"_id": "$month_key", "count": {"$sum": 1}}},
+        {"$sort": {"_id": -1}},
+    ]
+    months = []
+    async for row in db.monthly_goals.aggregate(pipeline):
+        if row["_id"]:
+            months.append({"month_key": row["_id"], "count": row["count"]})
+    # Ensure current month is always present
+    cur = current_month_key()
+    if not any(m["month_key"] == cur for m in months):
+        months.insert(0, {"month_key": cur, "count": 0})
+    return months
 
 
 @api_router.post("/monthly-goals", response_model=MonthlyItem)
 async def create_monthly(payload: MonthlyItemCreate):
     _validate_list_type(payload.list_type)
-    count = await db.monthly_goals.count_documents({"list_type": payload.list_type})
-    item = MonthlyItem(list_type=payload.list_type, title=payload.title, order=count)
+    mkey = payload.month_key or current_month_key()
+    count = await db.monthly_goals.count_documents(
+        {"list_type": payload.list_type, "month_key": mkey}
+    )
+    item = MonthlyItem(
+        list_type=payload.list_type, title=payload.title, order=count, month_key=mkey
+    )
     await db.monthly_goals.insert_one(item.model_dump())
     return item
 
@@ -723,6 +762,23 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def startup_migrations():
+    """One-shot migrations on backend startup."""
+    # Migrate legacy monthly_goals without month_key -> current month
+    try:
+        res = await db.monthly_goals.update_many(
+            {"$or": [{"month_key": {"$exists": False}}, {"month_key": None}, {"month_key": ""}]},
+            {"$set": {"month_key": current_month_key()}},
+        )
+        if res.modified_count:
+            logging.info(
+                f"[migration] backfilled month_key on {res.modified_count} monthly_goals items"
+            )
+    except Exception as e:
+        logging.warning(f"[migration] monthly_goals month_key backfill failed: {e}")
 
 
 @app.on_event("shutdown")

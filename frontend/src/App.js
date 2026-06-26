@@ -25,6 +25,7 @@ import { DiaryPage } from "./pages/DiaryPage";
 import { MonthlyGoalsPage } from "./pages/MonthlyGoalsPage";
 import { AuthCallback } from "./components/AuthCallback";
 import { ProfileChip } from "./components/ProfileChip";
+import { InstallPromo } from "./components/InstallPromo";
 import { bumpStreak } from "./lib/streak";
 import { todayDateLabel } from "./lib/utils-app";
 
@@ -332,11 +333,15 @@ function App() {
             update={monthly.update}
             toggle={monthly.toggle}
             remove={monthly.remove}
+            monthsAvailable={monthly.monthsAvailable}
+            statsForMonth={monthly.statsForMonth}
+            items={monthly.items}
           />
         )}
       </div>
 
       <BottomNav active={tab} onChange={setTab} />
+      <InstallPromo />
 
       <TaskFormModal
         open={modalOpen}

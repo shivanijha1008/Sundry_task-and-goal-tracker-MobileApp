@@ -24,3 +24,12 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// Register service worker (PWA + offline shell)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/service-worker.js")
+      .catch((err) => console.warn("[sw] registration failed:", err?.message));
+  });
+}

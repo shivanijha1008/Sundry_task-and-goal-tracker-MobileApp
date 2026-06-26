@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { applyPunctuation } from "../lib/punctuation";
 
 // Cross-browser Web Speech API support
 function getRecognitionCtor() {
@@ -62,9 +63,10 @@ export function useSpeechRecognition({ onResult, onFinal, lang = "en-US", contin
       }
       if (finals) {
         finalBuf += finals;
-        onFinal?.(finals);
+        const polishedFinal = applyPunctuation(finals);
+        onFinal?.(polishedFinal);
       }
-      const combined = (finalBuf + interim).trim();
+      const combined = applyPunctuation((finalBuf + interim).trim());
       setTranscript(combined);
       onResult?.(combined);
     };

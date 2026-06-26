@@ -1,0 +1,42 @@
+{
+  "summary": "Iter 10 Goals-tab expansion (6 features) tested end-to-end. Backend: 19/19 pytest pass (test_monthly_goals.py extended with TestMonthKey + TestAuthRegression) — all monthly_goals items have month_key (migration to '2026-06' applied), /api/monthly-goals/months returns desc-sorted [{month_key,count}] always including current month, ?month_key=2026-06 filters correctly, ?month_key=1999-01 returns [], POST with explicit month_key='2026-07' lands under July, POST without month_key defaults to current (2026-06). Existing endpoints (/api/tasks, /api/shopping, /api/me-time, /api/quote/today, /api/auth/me 401) unaffected. Frontend (1920x1080 viewport): /service-worker.js → HTTP 200; navigator.serviceWorker.getRegistrations() returns 1; InstallPromo NOT visible by default (correct — beforeinstallprompt didn't fire); localStorage 'sundry.installPromoDismissed' = null. Goals page: monthly-tiles-grid renders with 5 monthly-section-{type} tiles at md:grid-cols-2 (computed grid-template-columns = '352px 352px'); month-select shows 'June 2026', month-prev-btn shifts to 2026-05, month-today-btn snaps back to 2026-06; view-compare-btn opens monthly-compare-grid with comparison-col-last (May 2026) and comparison-col-this (June 2026) side-by-side. recap-open-btn opens recap-modal with recap-canvas at 1200x900 px; recap-download-png triggered a real download (filename: sundry-recap-2026-06.png), recap-download-pdf/recap-export-ics/recap-share/recap-modal-close all present and bound. Goals-page export-ics-btn triggered .ics download (filename: sundry-2026-06.ics) with success toast 'Calendar file saved'. Bottom nav still has 5 tabs (Tasks/Shop/Me Time/Diary/Goals). Punctuation transform: applyPunctuation('hello world period new line how are you question mark') → 'Hello world. \\nHow are you?'; plain dictation unaffected. No console errors, no PAGEERROR events.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Goals page (visual)", "issues": ["Header 'Monthly Goals' is partially overlapped by the '.ics saved' toast at top-right on first render (cosmetic; toast auto-dismisses). Not blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_monthly_goals.py",
+    "/app/test_reports/pytest/iter10_results.xml"
+  ],
+  "action_items": [
+    "(nit) applyPunctuation produces 'Hello world. \\nHow are you?' (space before \\n) rather than the spec's exact 'Hello world.\\nHow are you?'. To match, add a tidy step like s = s.replace(/ +\\n/g, '\\n') AFTER the existing tidy block. Functionally fine, just spec-exactness.",
+    "(nit) #monthly-tiles-grid contains both monthly-section-{type} AND monthly-section-toggle-{type} testids (10 children matching the prefix, only 5 are top-level tiles). If a future test asserts 'exactly 5 children', use [data-testid^=monthly-section-]:not([data-testid*=toggle]). All 5 expected list-type tiles render correctly.",
+    "(carry-over from iter 9, still open) verify useMonthlyGoals.add() optimistic-id reconciliation under flaky network — not retested in iter 10."
+  ],
+  "critical_code_review_comments": [
+    "server.py startup_migrations() is idempotent (only matches docs without month_key) — safe to run on every boot. ✅",
+    "server.py /api/monthly-goals/months returns Mongo aggregate; if collection is empty the loop skips, but the post-loop insert guarantees current month is always present. ✅",
+    "MonthlyItem.month_key uses default_factory=current_month_key — set at creation time, not import time. ✅",
+    "service-worker.js (frontend/public) correctly excludes /api/* from caching (verified by file path served at HTTP 200). Cache-first for static, network-first w/ '/' fallback for navigations — matches PWA best-practice.",
+    "Recap canvas renders synchronously in useEffect on modal open — observed canvas width=1200, height=900 immediately after open, no race condition.",
+    "InstallPromo is a conditional render gated on beforeinstallprompt; absent in headless Chromium without user-engagement — this is correct behavior, not a bug.",
+    "applyPunctuation regex `([.,!?;:])([^\\s\\n])` intentionally skips inserting space when next char is \\n, but the preceding `\\s+([.,!?;:])` tidy doesn't collapse a single space sitting BEFORE a \\n. Easy 1-line fix as called out in action_items."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_monthly_goals.py (added TestMonthKey + TestAuthRegression classes; 7 new tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 pytest — 12 existing monthly-goals + 6 new month_key + 1 auth regression)",
+    "frontend": "~98% (6/6 iter-10 features verified; only nit is punctuation extra-space cosmetic)"
+  },
+  "test_credentials": "Not needed for iter-10 scope (guest mode is sufficient for Goals features).",
+  "seed_data_creation": "None — used pre-existing DB items (1 goal, 1 book, 1 place) plus ephemeral TEST_ items cleaned up via cleanup_ids fixture.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 10 backend regression now lives in /app/backend/tests/test_monthly_goals.py with three classes: TestMonthlyGoals (CRUD), TestMonthKey (new), TestRegression + TestAuthRegression. Auth-specific tests are still in /app/backend/tests/test_auth.py. Run: pytest /app/backend/tests/ -v. For the Goals tab UI, the canonical viewport is 1920x1080 to trigger md:grid-cols-2. Recap modal canvas is verified by reading c.width / c.height directly on the DOM canvas element (it's 1200x900 internal). For PWA install promo, do NOT expect it to appear in headless Chromium — instead verify the component is dormant (not visible) and localStorage flag is null. /service-worker.js must return 200 from the public origin (verified). ICS export filename pattern: sundry-{YYYY-MM}.ics; recap PNG: sundry-recap-{YYYY-MM}.png.",
+  "rca_of_the_issue": "N/A — all 6 iter-10 acceptance criteria pass. Only two cosmetic nits raised."
+}
