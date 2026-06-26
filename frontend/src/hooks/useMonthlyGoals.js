@@ -50,24 +50,40 @@ export function useMonthlyGoals(online) {
       const trimmed = (title || "").trim();
       if (!trimmed) return;
       const order = items.filter((i) => i.list_type === list_type).length;
+      const tempId = uuid();
       const item = {
-        id: uuid(),
+        id: tempId,
         list_type,
         title: trimmed,
         checked: false,
         order,
         created_at: new Date().toISOString(),
       };
-      persist([...items, item]);
+      // optimistic insert
+      setItems((prev) => {
+        const next = [...prev, item];
+        localStorage.setItem(KEY, JSON.stringify(next));
+        return next;
+      });
       if (online) {
         try {
-          await api.createMonthly({ list_type, title: trimmed });
+          const created = await api.createMonthly({ list_type, title: trimmed });
+          // reconcile local id with server-generated id
+          setItems((prev) => {
+            const next = prev.map((i) =>
+              i.id === tempId
+                ? { ...i, id: created.id, order: created.order ?? i.order, created_at: created.created_at }
+                : i
+            );
+            localStorage.setItem(KEY, JSON.stringify(next));
+            return next;
+          });
         } catch (e) {
           console.warn("[monthly] create failed:", e?.message);
         }
       }
     },
-    [items, online, persist]
+    [items, online]
   );
 
   const update = useCallback(
