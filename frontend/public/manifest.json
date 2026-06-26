@@ -1,0 +1,32 @@
+{
+  "short_name": "Sundry",
+  "name": "Sundry — All your little things",
+  "icons": [
+    {
+      "src": "/favicon-16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1B0A2A",
+  "background_color": "#0E0617",
+  "description": "All your little things — tasks, shopping, me-time, diary, and 5 monthly intentions in one calm, offline-first home."
+}

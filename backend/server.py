@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Response, Cookie, Header
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -159,6 +159,18 @@ class MonthlyItemUpdate(BaseModel):
     title: Optional[str] = None
     checked: Optional[bool] = None
     order: Optional[int] = None
+
+
+# Auth (Emergent-managed Google Auth)
+class AuthSessionRequest(BaseModel):
+    session_id: str
+
+
+class AuthUser(BaseModel):
+    user_id: str
+    email: str
+    name: str = ""
+    picture: str = ""
 
 
 # ---------------- Task routes ----------------
@@ -408,6 +420,141 @@ async def quote_today():
     _QUOTE_CACHE["date"] = today_iso
     _QUOTE_CACHE["data"] = data
     return data
+
+
+# ---------------- Auth (Emergent-managed Google Auth) ----------------
+EMERGENT_AUTH_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+SESSION_COOKIE_NAME = "session_token"
+SESSION_TTL_DAYS = 7
+
+
+async def _resolve_user(
+    session_token: Optional[str], authorization: Optional[str]
+) -> Optional[dict]:
+    """Read session_token from cookie, fallback to Authorization: Bearer. Returns user dict or None."""
+    token = session_token
+    if not token and authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        return None
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at)
+        except Exception:
+            return None
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        return None
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    return user
+
+
+@api_router.post("/auth/session")
+async def auth_create_session(payload: AuthSessionRequest, response: Response):
+    if not payload.session_id:
+        raise HTTPException(400, "session_id required")
+    # Exchange session_id with Emergent for user data + session_token
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(
+                EMERGENT_AUTH_SESSION_URL,
+                headers={"X-Session-ID": payload.session_id},
+            )
+    except Exception as e:
+        logging.warning(f"emergent /session-data failed: {e}")
+        raise HTTPException(502, "Auth provider unreachable")
+    if r.status_code != 200:
+        raise HTTPException(401, "Invalid or expired session_id")
+    data = r.json()
+    email = data.get("email")
+    if not email:
+        raise HTTPException(502, "Auth provider returned no email")
+
+    # Upsert user (idempotent by email)
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": data.get("name", ""), "picture": data.get("picture", "")}},
+        )
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one(
+            {
+                "user_id": user_id,
+                "email": email,
+                "name": data.get("name", ""),
+                "picture": data.get("picture", ""),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+    session_token = data.get("session_token") or f"sess_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
+    await db.user_sessions.insert_one(
+        {
+            "user_id": user_id,
+            "session_token": session_token,
+            "expires_at": expires_at.isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=SESSION_TTL_DAYS * 24 * 60 * 60,
+        path="/",
+    )
+
+    return {
+        "user_id": user_id,
+        "email": email,
+        "name": data.get("name", ""),
+        "picture": data.get("picture", ""),
+    }
+
+
+@api_router.get("/auth/me")
+async def auth_me(
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    user = await _resolve_user(session_token, authorization)
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    return {
+        "user_id": user["user_id"],
+        "email": user["email"],
+        "name": user.get("name", ""),
+        "picture": user.get("picture", ""),
+    }
+
+
+@api_router.post("/auth/logout")
+async def auth_logout(
+    response: Response,
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    token = session_token
+    if not token and authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME, path="/", samesite="none", secure=True
+    )
+    return {"ok": True}
 
 
 # ---------------- Google Calendar OAuth ----------------

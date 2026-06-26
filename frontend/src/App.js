@@ -23,6 +23,8 @@ import { ShoppingPage } from "./pages/ShoppingPage";
 import { MeTimePage } from "./pages/MeTimePage";
 import { DiaryPage } from "./pages/DiaryPage";
 import { MonthlyGoalsPage } from "./pages/MonthlyGoalsPage";
+import { AuthCallback } from "./components/AuthCallback";
+import { ProfileChip } from "./components/ProfileChip";
 import { bumpStreak } from "./lib/streak";
 import { todayDateLabel } from "./lib/utils-app";
 
@@ -83,8 +85,15 @@ function TasksView({
 
       <div className="flex items-end justify-between mb-4 gap-3 flex-wrap">
         <div className="slide-up">
-          <div className="text-[11px] font-bold uppercase tracking-[0.25em] opacity-60 mb-1">
-            <span className="gradient-text-pink font-display tracking-[0.2em]">LUMORA</span> · {todayDateLabel()}
+          <div className="text-[11px] font-bold uppercase tracking-[0.25em] opacity-60 mb-1 flex items-center gap-2">
+            <img
+              src="/logo-mark.png"
+              alt="Sundry"
+              data-testid="brand-mark"
+              className="w-5 h-5 rounded-md object-cover"
+              style={{ boxShadow: "0 2px 8px rgba(255,45,146,0.35)" }}
+            />
+            <span className="gradient-text-pink font-display tracking-[0.2em]">SUNDRY</span> · {todayDateLabel()}
           </div>
           <h1 className="font-display text-5xl md:text-6xl leading-[0.95]">
             <span className="gradient-text-pink">My Day</span>
@@ -109,6 +118,7 @@ function TasksView({
           >
             {dayMode ? "🌙" : "☀️"}
           </button>
+          <ProfileChip />
           <button
             data-testid="add-task-btn"
             onClick={() => { setEditing(null); setModalOpen(true); }}
@@ -221,12 +231,20 @@ function App() {
   const monthly = useMonthlyGoals(online);
 
   const [tab, setTab] = useState("tasks");
-  const [dayMode, setDayMode] = useState(() => localStorage.getItem("lumora.dayMode") === "1");
+  const [dayMode, setDayMode] = useState(() => {
+    // migrate legacy lumora.dayMode key if present
+    const legacy = localStorage.getItem("lumora.dayMode");
+    if (legacy != null && localStorage.getItem("sundry.dayMode") == null) {
+      localStorage.setItem("sundry.dayMode", legacy);
+      localStorage.removeItem("lumora.dayMode");
+    }
+    return localStorage.getItem("sundry.dayMode") === "1";
+  });
 
   useEffect(() => {
     if (dayMode) document.body.classList.add("day-mode");
     else document.body.classList.remove("day-mode");
-    localStorage.setItem("lumora.dayMode", dayMode ? "1" : "0");
+    localStorage.setItem("sundry.dayMode", dayMode ? "1" : "0");
   }, [dayMode]);
   const [activeTask, setActiveTask] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -338,4 +356,16 @@ function App() {
   );
 }
 
-export default App;
+export default function Root() {
+  // CRITICAL: Detect OAuth callback synchronously during render (NOT in useEffect).
+  // useEffect would run after App mounts, causing race conditions with the
+  // AuthProvider's /auth/me check.
+  if (
+    typeof window !== "undefined" &&
+    window.location.hash &&
+    window.location.hash.includes("session_id=")
+  ) {
+    return <AuthCallback />;
+  }
+  return <App />;
+}

@@ -34,11 +34,11 @@ export const ShareStreakButton = () => {
     ctx.fillStyle = r2;
     ctx.fillRect(0, 0, 1080, 1920);
 
-    // LUMORA brand
+    // SUNDRY brand
     ctx.font = "bold 48px Unbounded, sans-serif";
     ctx.fillStyle = "#FF6BB4";
     ctx.textAlign = "center";
-    ctx.fillText("LUMORA", 540, 280);
+    ctx.fillText("SUNDRY", 540, 280);
 
     // Flame
     ctx.font = "300px sans-serif";
@@ -60,10 +60,10 @@ export const ShareStreakButton = () => {
     // Tagline
     ctx.font = "500 42px Manrope, sans-serif";
     ctx.fillStyle = "rgba(245,234,247,0.8)";
-    ctx.fillText("Your day, lit up.", 540, 1700);
+    ctx.fillText("All your little things.", 540, 1700);
     ctx.font = "bold 32px Manrope, sans-serif";
     ctx.fillStyle = "#FF6BB4";
-    ctx.fillText("lumora.app", 540, 1770);
+    ctx.fillText("sundry.app", 540, 1770);
 
     return c;
   };
@@ -74,7 +74,7 @@ export const ShareStreakButton = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `lumora-streak.png`;
+    a.download = `sundry-streak.png`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Streak card downloaded 🔥");
@@ -83,10 +83,10 @@ export const ShareStreakButton = () => {
   const shareNative = async () => {
     const c = generate();
     const blob = await new Promise((res) => c.toBlob(res, "image/png"));
-    const file = new File([blob], "lumora-streak.png", { type: "image/png" });
+    const file = new File([blob], "sundry-streak.png", { type: "image/png" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: "My Lumora Streak", text: `🔥 ${readStreak().count}-day Lumora streak — your move.` });
+        await navigator.share({ files: [file], title: "My Sundry Streak", text: `🔥 ${readStreak().count}-day Sundry streak — your move.` });
       } catch {
         /* user dismissed */
       }

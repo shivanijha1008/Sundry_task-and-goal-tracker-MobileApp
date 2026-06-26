@@ -1,0 +1,38 @@
+{
+  "summary": "Phase 3 (Sundry rebrand + Gemini-generated logo assets) + Phase 4 (Emergent Google Auth, optional/guest-friendly) tested end-to-end. Backend: 14/14 new auth pytest cases pass — /api/auth/me (no token=401, valid Bearer=200, valid cookie=200, invalid token=401, expired session=401), /api/auth/session (empty body=422, bogus session_id=401), /api/auth/logout (no token=200 idempotent, Bearer deletes session row, cookie deletes session row), and existing endpoints (/api/tasks, /api/shopping, /api/me-time, /api/monthly-goals) all still 200. Existing 12/12 monthly-goals regression suite still passes. Frontend rebrand: <title>='Sundry — All your little things', favicon/manifest/og-image all point to Sundry assets (all five icon files return 200 with image content), header pill reads 'SUNDRY' with data-testid='brand-mark' and the new logo image, zero 'LUMORA/Lumora' literal text in the rendered UI. Guest mode: login-btn visible, profile-chip absent, full UI usable, day-mode-toggle works, monthly-goals-page loads with 5 sections. Login click navigates to https://auth.emergentagent.com/?redirect=<origin>/ exactly as specified. Seeded-session flow: setting session_token cookie causes profile-chip to render (with user name+email), clicking it opens profile-menu with logout-btn; clicking logout-btn calls POST /api/auth/logout, hides profile-chip, and re-shows login-btn. Auth-callback hash flow: navigating to /#session_id=fake_id_for_testing renders data-testid='auth-callback', POSTs to /api/auth/session (backend returns 401 since Emergent /session-data returns 404 for bogus id), and shows 'Sign-in failed' + retry button (data-testid='auth-callback-retry-btn'). NO new issues found.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth.py",
+    "/app/backend/tests/test_monthly_goals.py",
+    "/app/test_reports/pytest/iter9_auth_results.xml"
+  ],
+  "action_items": [
+    "(carried over from iter 8, still relevant) Fix useMonthlyGoals.add() to reconcile local UUID with server.id — main agent claimed it was fixed in iter 8 via git diff but a retest of that specific flow was NOT redone in this iteration. Verify no 404s appear in console when adding then immediately editing/deleting a goal.",
+    "(nit) mic-task-title / mic-task-description / mic-monthly-add-{listType} only render when their respective modals/sections are open — testers should expand the section first. Current behaviour is correct."
+  ],
+  "critical_code_review_comments": [
+    "server.py _resolve_user: timezone-aware comparison is handled (assumes naive expires_at = UTC). All MongoDB reads use {_id:0} projection consistently for users, user_sessions. ✅",
+    "server.py auth_create_session: cookie attributes correctly httponly+secure+samesite=none, 7-day max_age — matches Emergent playbook. ✅",
+    "server.py /auth/session uses email as the upsert key — if Emergent ever returns the same Google email under a different sub/provider this would collapse to one user_id (probably fine, just be aware).",
+    "AuthCallback retry copy says 'Back to Sundry' rather than literal 'Retry' — the data-testid 'auth-callback-retry-btn' still matches the spec; just calling it out so spec authors know the visible label differs from the testid name.",
+    "Tasks header has 3 pills (SUNDRY brand, ONLINE status, 0 DAYS streak) plus Sign in — slightly crowded on narrow desktop widths but no overflow observed at 1920px. Consider compacting on <=400px viewports."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 auth + 12/12 monthly-goals regression = 26/26)",
+    "frontend": "100% (rebrand + asset loading + guest mode + login redirect + seeded-session + profile menu + logout + auth-callback error path all verified)"
+  },
+  "test_credentials": "Seeded ad-hoc via mongosh per /app/memory/test_credentials.md. Sample session_token used: sess_test_ui_<ts>. All TEST_ data cleaned up after the run (users_deleted=1, sessions_deleted=0 since logout had already removed the row).",
+  "seed_data_creation": "test_auth.py creates one test user+session per test via mongosh and deletes the session row in a finally block; a module-scope fixture sweeps any remaining sundry.test.* / sess_test_* rows on teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression now has TWO files: /app/backend/tests/test_monthly_goals.py (Phase 1) and /app/backend/tests/test_auth.py (Phase 4). Run `pytest /app/backend/tests/ -v` for full sweep — both files use mongosh for seed/cleanup so mongosh must be on PATH (it is in this container). For UI auth tests in headless Chromium, seed a user+session in MongoDB and call page.context.add_cookies([{name:'session_token', value:<token>, domain:'<host>', path:'/', httpOnly:true, secure:true, sameSite:'None'}]) BEFORE navigation. To test the callback error path, navigate directly to '/#session_id=fake_id_for_testing' — the page renders data-testid='auth-callback' synchronously (during render, not in useEffect) and POSTs to /api/auth/session. The real Google OAuth round-trip cannot be tested headlessly — the seeded-session pattern is the canonical substitute.",
+  "rca_of_the_issue": "N/A — all Phase 3 & Phase 4 acceptance criteria pass. No new bugs found."
+}
