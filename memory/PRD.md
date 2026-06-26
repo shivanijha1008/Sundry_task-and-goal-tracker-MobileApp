@@ -60,3 +60,40 @@ User uploaded a reference design (dark glass/glow, magenta-purple gradient, pill
 - **Smart suggestions** — 12-suggestion bank with time-of-day filters; renders 4 chips above task list; one tap auto-creates task with title + duration + timer mode
 
 Bottom nav now: Tasks · Shopping · Me Time (3 tabs)
+
+
+## Iteration 9 (Jun 26, 2026) — Sundry Rebrand
+App renamed **Lumora → Sundry** ("All your little things").
+
+### Phase 1 — Monthly Goals tab ✅
+- 5th bottom-nav tab `nav-goals-btn` (Tasks · Shop · Me Time · Diary · **Goals**)
+- 5 collapsible lists: Goals for the month, Skills to be learned, Books to be read, Movies/Series to watch, Places to be explored
+- Each list: add / inline-edit / check-off / delete; counts (`X of Y done`)
+- localStorage cache + MongoDB sync (`/api/monthly-goals` CRUD with `list_type` validation)
+- Optimistic add reconciles temp-UUID → server-id on response (bug fix from iter 8)
+- Files: `hooks/useMonthlyGoals.js`, `pages/MonthlyGoalsPage.jsx`, `lib/api.js`, `components/BottomNav.jsx` (now 5 tabs)
+
+### Phase 2 — Speech-to-text ✅
+- Web Speech API wrapper hook `useSpeechRecognition` with cross-browser detection
+- `<MicButton />` component — pulse animation + glow while listening, fallback toast on Firefox/unsupported
+- Wired into: task title, task description, shopping name, me-time title, diary text, search input, all 5 monthly-goals add inputs, monthly-goal inline-edit input
+- Files: `hooks/useSpeechRecognition.js`, `components/MicButton.jsx`, plus inputs across `TaskFormModal.jsx`, `ShoppingPage.jsx`, `MeTimePage.jsx`, `DiaryPage.jsx`, `App.js`
+
+### Phase 3 — Rename + Logo (Gemini Nano Banana) ✅
+- 5 names proposed (Lumora, Glowdeck, Halo Loop, Petal, Sundry) — user picked **Sundry**
+- Logo generated via `gemini-3.1-flash-image-preview` (one-shot script: `/app/scripts/generate_logo.py`)
+- Assets in `/app/frontend/public/`: `logo.png` (512), `logo-mark.png`, `favicon-16.png`, `favicon-32.png`, `favicon.ico` (multi-res), `apple-touch-icon.png` (180), `og-image.png` (1200×630)
+- HTML: `<title>` = "Sundry — All your little things"; theme-color, manifest.json, og:image, twitter:card
+- In-app brand pill: SUNDRY + tiny logo mark next to date label (`data-testid="brand-mark"`)
+- Share-card updated to "All your little things." + "sundry.app" + filename `sundry-streak.png`
+- localStorage migration: `lumora.dayMode` → `sundry.dayMode`
+
+### Phase 4 — Emergent Google Auth (OPTIONAL) ✅
+- Backend: `/api/auth/session` (POST: exchanges session_id via Emergent `/session-data`; upserts user; httpOnly secure samesite=None cookie; 7-day TTL), `/api/auth/me` (GET: cookie OR `Authorization: Bearer` fallback), `/api/auth/logout` (POST: deletes session row + clears cookie)
+- MongoDB: `users` (`user_id`, `email`, `name`, `picture`, `created_at`) and `user_sessions` (`user_id`, `session_token`, `expires_at`, `created_at`)
+- Frontend: `<AuthProvider>` (skips `/auth/me` when URL hash has `session_id=`), `<AuthCallback>` (useRef one-shot, hash read synchronously during render), `<ProfileChip>` (Sign-in button OR avatar+dropdown+logout)
+- Guest mode preserved: all features work without sign-in; sign-in is purely for cloud sync identity
+
+### Test status
+- Iteration 9 testing agent: **26/26 backend pass + 100% frontend pass — no issues**
+- Regression suites: `backend/tests/test_monthly_goals.py`, `backend/tests/test_auth.py`
