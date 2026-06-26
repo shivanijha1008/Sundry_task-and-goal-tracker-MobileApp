@@ -97,3 +97,24 @@ App renamed **Lumora → Sundry** ("All your little things").
 ### Test status
 - Iteration 9 testing agent: **26/26 backend pass + 100% frontend pass — no issues**
 - Regression suites: `backend/tests/test_monthly_goals.py`, `backend/tests/test_auth.py`
+
+## Iteration 10 (Jun 26, 2026) — Goals tab expansion (6 features)
+
+1. **Side-by-side tiles** — Goals page is now a `md:grid-cols-2` tile grid; each tile has its own emoji header, progress bar, add-input with mic, and inline-editable items
+2. **Monthly Recap card + PDF** — `<MonthlyRecapModal>` with canvas-rendered 1200×900 share card (completion ring + per-list mini-cards); buttons: PNG download, **PDF** (jsPDF — page 1 card image, page 2+ full text list grouped by list_type), Share (Web Share API native), ICS export
+3. **Last vs This month comparison view** — toggle `view-compare-btn` shows `comparison-col-last` and `comparison-col-this` side-by-side with completion %, per-list breakdown, and first 3 items preview
+4. **.ics calendar export** — RFC 5545 builder (`/app/frontend/src/lib/icsExport.js`); one all-day VEVENT per goal item dated to the **last day** of the selected month; one-click export button on Goals page header + inside Recap modal
+5. **Voice-driven long-form punctuation** — `/app/frontend/src/lib/punctuation.js` applies spoken commands (period/comma/question mark/exclamation point/new line/new paragraph/colon/semicolon/dash/ellipsis/open-close quote/paren) to **every** mic; auto-capitalizes sentence starts and stand-alone "i"; wired into `useSpeechRecognition.onresult` so all mic buttons benefit
+6. **PWA install promo + service worker** — `public/service-worker.js` cache-first for static assets (never caches `/api/*`), navigation network-first with cached `/` fallback; `<InstallPromo>` bottom-banner uses `beforeinstallprompt` event; localStorage `sundry.installPromoDismissed` for one-time dismissal
+
+### Data model change
+- `MonthlyItem` now carries `month_key` (e.g. `"2026-06"`), defaulting to current month at creation
+- One-shot startup migration in `server.py` backfills legacy items
+- New endpoint: `GET /api/monthly-goals/months` returns `[{month_key, count}]` sorted desc, current month always included
+- `GET /api/monthly-goals?month_key=YYYY-MM` filters by month
+
+### Test status
+- Iteration 10 testing agent: **19/19 backend pytest pass, ~98% frontend pass — all 6 features verified end-to-end**
+- Punctuation `\n` spacing nit fixed post-test
+- Regression test files: `/app/backend/tests/test_monthly_goals.py` (now with TestMonthKey + TestAuthRegression), `/app/backend/tests/test_auth.py`
+

@@ -39,6 +39,7 @@ export function applyPunctuation(transcript) {
   s = s
     .replace(/\s+([.,!?;:])/g, "$1") // no space before punctuation
     .replace(/([.,!?;:])([^\s\n])/g, "$1 $2") // ensure space after
+    .replace(/ +\n/g, "\n") // drop space sitting right before a newline
     .replace(/\n /g, "\n") // no space right after newline
     .replace(/ {2,}/g, " ");
 
