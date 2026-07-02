@@ -118,3 +118,50 @@ App renamed **Lumora → Sundry** ("All your little things").
 - Punctuation `\n` spacing nit fixed post-test
 - Regression test files: `/app/backend/tests/test_monthly_goals.py` (now with TestMonthKey + TestAuthRegression), `/app/backend/tests/test_auth.py`
 
+
+## Iteration 11 (Jul 2, 2026) — Native mobile app (Capacitor 7)
+
+Sundry is now a real cross-platform native app. The existing React code is wrapped
+via Capacitor 7 into iOS + Android shells with full native API access. Zero web
+regressions — everything degrades gracefully on the web because every native call
+is gated on `Capacitor.isNativePlatform()`.
+
+### What's shipped
+1. **Capacitor 7 project scaffold** — `capacitor.config.ts` (appId `app.sundry.mobile`, webDir `build`), `android/` (Android Studio), `ios/` (Xcode) native projects generated in-repo
+2. **Native APIs wired via `/app/frontend/src/lib/native.js`** (safe to import anywhere):
+   - `hapticTap()` / `hapticSelect()` / `hapticSuccess()` — impact + selection + success
+   - `scheduleNotification(id, title, body, at)` + `cancelNotification(id)` — task reminders when `due_time` is set (auto-scheduled on add, auto-cancelled on complete/delete)
+   - `applyStatusBarTheme(dayMode)` — light/dark tint + Android backgroundColor
+   - `shareNative({title, text, url, files})` — native share sheet with Web Share fallback
+   - `hideSplash()` — splash dismiss ~400 ms after mount
+   - `onAppResume(cb)` — with `document.visibilitychange` web fallback
+3. **Interactions haptified**:
+   - Bottom-nav tap → `hapticSelect`
+   - Task check-off → `hapticSuccess`; uncheck → `hapticTap`; delete → `cancelNotification`
+   - Monthly goal check-off → `hapticSuccess`; uncheck → `hapticTap`
+4. **Task reminders (native)** — adding a task with `due_time="HH:MM"` today schedules a `LocalNotifications` for that time. Completing/deleting the task cancels it. Web = silent no-op.
+5. **Mobile-first responsive pass** (`/app/frontend/src/index.css` bottom section):
+   - Safe-area padding for iOS notch / Android gesture bar
+   - 44×44 min tap targets on `≤768px`
+   - 16px input font-size to prevent iOS zoom
+   - `@media (display-mode: standalone)` — status-bar overlay strip
+   - Bottom-nav taps enlarged to 56×52 (verified by testing agent)
+6. **Icons + splash generated via `@capacitor/assets`** from `/app/frontend/assets/` (icon, foreground, background, splash). All iOS/Android/PWA sizes produced (13 iOS, 15 Android, 7 PWA assets).
+7. **AndroidManifest.xml** declares: `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `USE_EXACT_ALARM`, `VIBRATE`, `RECEIVE_BOOT_COMPLETED`, `INTERNET`.
+8. **iOS Info.plist** hardened: `UIUserInterfaceStyle=Dark`, `UIStatusBarStyle=LightContent`, `ITSAppUsesNonExemptEncryption=false` (unblocks App Store submission).
+9. **Docs**: `/app/mobile/README.md` (full dev + release workflow: cap sync, IDE open, keystore gen, bundleRelease, App Store archive) and `/app/mobile/PRIVACY.md` (draft policy for store listing).
+
+### Test status
+- Iteration 11 testing agent: **33/33 backend pytest pass, 100% frontend regression + smoke, zero native/Capacitor console errors on web**
+- Bottom-nav mobile tap target: **56×53 px** ✅ (>44 min)
+- Service worker still registered post-Capacitor wrap ✅
+- Capacitor plugins: `@capacitor/{core,cli,android,ios,haptics,local-notifications,status-bar,share,app,preferences,splash-screen,assets}` @ ^7
+
+### Not done (offloaded to user's local machine)
+- Actual `.apk` / `.aab` compilation (needs Android Studio + JDK 17)
+- Actual `.ipa` archive (needs macOS + Xcode + CocoaPods)
+- Real device install + haptic/notification live testing
+- Play Store / App Store metadata submission
+
+All build steps are documented in `/app/mobile/README.md`.
+
