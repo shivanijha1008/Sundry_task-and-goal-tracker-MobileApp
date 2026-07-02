@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "@/App.css";
 import { Reorder } from "framer-motion";
-import { Plus, Search, Wifi, WifiOff, Filter } from "lucide-react";
+import { Plus, Search, Wifi, WifiOff, Filter, Settings } from "lucide-react";
 import { Toaster, toast } from "sonner";
 
 import { useTasks } from "./hooks/useTasks";
@@ -26,6 +26,7 @@ import { MonthlyGoalsPage } from "./pages/MonthlyGoalsPage";
 import { AuthCallback } from "./components/AuthCallback";
 import { ProfileChip } from "./components/ProfileChip";
 import { InstallPromo } from "./components/InstallPromo";
+import { SettingsModal } from "./components/SettingsModal";
 import { bumpStreak } from "./lib/streak";
 import { todayDateLabel } from "./lib/utils-app";
 import {
@@ -34,7 +35,9 @@ import {
   hideSplash,
   hapticTap,
   hapticSelect,
+  onAppResume,
 } from "./lib/native";
+import { rescheduleDebounced, reschedule } from "./lib/dailyNudge";
 
 function StatChip({ label, value, color, testid }) {
   return (
@@ -50,7 +53,7 @@ function GoogleSignInButton() { return null; }
 function TasksView({
   tasks, online, addTask, updateTask, deleteTask, reorderTasks, logSession,
   activeTask, setActiveTask, setModalOpen, setEditing, setShareTarget,
-  dayMode, setDayMode,
+  dayMode, setDayMode, onOpenSettings,
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -125,6 +128,15 @@ function TasksView({
             aria-label="Toggle day mode"
           >
             {dayMode ? "🌙" : "☀️"}
+          </button>
+          <button
+            data-testid="settings-btn"
+            onClick={onOpenSettings}
+            className="glass w-10 h-10 rounded-full flex items-center justify-center"
+            title="Settings"
+            aria-label="Open settings"
+          >
+            <Settings size={15} strokeWidth={2.5} />
           </button>
           <ProfileChip />
           <button
@@ -266,9 +278,26 @@ function App() {
     }, 400);
     return () => clearTimeout(t);
   }, []);
+
+  // Daily nudge: reschedule whenever tasks / monthly items change
+  useEffect(() => {
+    rescheduleDebounced({ tasks, monthlyItems: monthly.items });
+  }, [tasks, monthly.items]);
+
+  // Reschedule immediately when the app resumes from background
+  useEffect(() => {
+    const unsub = onAppResume(() => {
+      reschedule({ tasks, monthlyItems: monthly.items }).catch(() => {});
+    });
+    return () => {
+      try { unsub && unsub(); } catch { /* ignore */ }
+    };
+    // We deliberately depend only on mount; reschedule captures latest via closure of the parent effect
+  }, [tasks, monthly.items]);
   const [activeTask, setActiveTask] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState(null);
 
   const handleSave = async (data) => {
@@ -310,6 +339,7 @@ function App() {
             setShareTarget={setShareTarget}
             dayMode={dayMode}
             setDayMode={setDayMode}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
         {tab === "shopping" && (
@@ -361,6 +391,11 @@ function App() {
 
       <BottomNav active={tab} onChange={setTab} />
       <InstallPromo />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        tasksSnapshot={{ tasks, monthlyItems: monthly.items }}
+      />
 
       <TaskFormModal
         open={modalOpen}
