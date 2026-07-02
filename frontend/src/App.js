@@ -28,6 +28,13 @@ import { ProfileChip } from "./components/ProfileChip";
 import { InstallPromo } from "./components/InstallPromo";
 import { bumpStreak } from "./lib/streak";
 import { todayDateLabel } from "./lib/utils-app";
+import {
+  isNative,
+  applyStatusBarTheme,
+  hideSplash,
+  hapticTap,
+  hapticSelect,
+} from "./lib/native";
 
 function StatChip({ label, value, color, testid }) {
   return (
@@ -246,7 +253,19 @@ function App() {
     if (dayMode) document.body.classList.add("day-mode");
     else document.body.classList.remove("day-mode");
     localStorage.setItem("sundry.dayMode", dayMode ? "1" : "0");
+    applyStatusBarTheme(dayMode);
   }, [dayMode]);
+
+  // Native app boot: hide splash + mark html for CSS targeting
+  useEffect(() => {
+    if (isNative()) {
+      document.documentElement.setAttribute("data-native", "1");
+    }
+    const t = setTimeout(() => {
+      hideSplash();
+    }, 400);
+    return () => clearTimeout(t);
+  }, []);
   const [activeTask, setActiveTask] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);

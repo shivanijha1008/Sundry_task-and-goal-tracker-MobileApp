@@ -1,0 +1,45 @@
+{
+  "summary": "Iter 11 (Capacitor conversion + mobile-first + native features) tested end-to-end as a REGRESSION + light e2e. VERDICT: PASS. Backend: 33/33 pytest pass in /app/backend/tests/ (test_auth.py + test_monthly_goals.py). One test (TestAuthLogout::test_logout_with_bearer_deletes_session) failed once under xdist parallel scheduling but PASSED on isolated re-run — classic flaky/race between gw0 and gw1 workers, NOT an iter-11 regression. No backend changes in iter 11 as stated. Frontend @1920x1080: full existing surface intact — bottom-nav + nav-tasks-btn/nav-shopping-btn/nav-metime-btn/nav-diary-btn/nav-goals-btn/streak-badge/quote-banner/day-mode-toggle/add-task-btn all render OK; 5 tab switches complete with zero console errors; day-mode toggle 2x completes with zero errors (applyStatusBarTheme is a web no-op via isNative() guard, confirmed window.Capacitor.isNativePlatform()===false). Task-form-modal opens, task-title-input + due-time-input accept values, modal-save-btn dispatches — scheduleNotification silent no-op on web (zero errors). Frontend @390x844 (iPhone 14 Pro): bottom-nav renders with ALL 5 tabs, each tap target is 56x53 px (well >=44px min). Service worker still registered (1 registration, scope='/'). navigator.serviceWorker.getRegistrations().length===1. Screenshots saved: /tmp/iter11_tasks_390.jpg, /tmp/iter11_goals_390.jpg. Console: only 2 unrelated 401 errors (auth-required endpoints called in guest mode — expected, present in iter 10 as well); ZERO native/Capacitor/haptic/status-bar errors or warnings. Capacitor scaffold sanity: /app/frontend/capacitor.config.ts appId='app.sundry.mobile', webDir='build', plugins configured (SplashScreen bg #1B0A2A, StatusBar Dark, LocalNotifications smallIcon 'ic_notification'). /app/frontend/android/ and /app/frontend/ios/ both scaffolded with non-empty subdirs. AndroidManifest.xml contains POST_NOTIFICATIONS, VIBRATE, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM, RECEIVE_BOOT_COMPLETED. /app/mobile/README.md exists with 'npx cap sync', 'npx cap open android', 'gradlew bundleRelease' + full release workflow. /app/mobile/PRIVACY.md exists (48 lines, covers data collection, storage, sharing, notifications, GDPR/COPPA, contact).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/logout (Bearer)", "issue": "test_logout_with_bearer_deletes_session flaky under pytest-xdist parallel run — passed cleanly on isolated retry. Likely fixture ordering between gw0/gw1 workers writing sessions concurrently. Not an iter-11 regression."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth.py",
+    "/app/backend/tests/test_monthly_goals.py",
+    "/app/test_reports/pytest/iter11_results.xml"
+  ],
+  "action_items": [
+    "(optional) Stabilize TestAuthLogout::test_logout_with_bearer_deletes_session under xdist by pinning to serial (add @pytest.mark.serial or set --dist=loadscope with per-class scope) or by using unique session IDs per worker via os.environ['PYTEST_XDIST_WORKER'].",
+    "(nit, carry-over from iter 10) applyPunctuation space-before-newline; not iter-11 scope."
+  ],
+  "critical_code_review_comments": [
+    "native.js correctly gates ALL native SDK calls behind isNative() check — Haptics, LocalNotifications, StatusBar, SplashScreen, App lifecycle. Every function early-returns with no throw when Capacitor.isNativePlatform()===false. Verified in-browser: window.Capacitor.isNativePlatform() returns false, and 0 native-related console errors after exercising haptic surfaces (5 tab switches + monthly-goal toggle attempt + daymode 2x + task modal open/save with due_time='23:59').",
+    "shareNative correctly falls back to navigator.share on web (with files-capable canShare check) — no accidental Capacitor Share invocation on web.",
+    "onAppResume falls back to document.visibilitychange on web — safe and matches typical Capacitor-app-boot semantics.",
+    "idFromString uses positive-32-bit hash — safe for LocalNotifications.schedule id contract.",
+    "capacitor.config.ts uses named app 'Sundry' with unique appId 'app.sundry.mobile', webDir='build' matches CRA output, plugin config for SplashScreen/StatusBar/LocalNotifications is complete. server.url is commented out so builds bundle the local /build (offline-friendly, per README).",
+    "AndroidManifest.xml has all 5 permissions per README §6 (INTERNET is default for Capacitor, plus POST_NOTIFICATIONS, VIBRATE, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM, RECEIVE_BOOT_COMPLETED). ✅",
+    "index.js/App.js still register /service-worker.js — verified at runtime: navigator.serviceWorker.getRegistrations().length===1 with scope='/'. No iter-10 PWA regression.",
+    "BottomNav.jsx tap targets at mobile computed at 56x53 px (well above 44x44 iOS/Android HIG minimum). ✅",
+    "The 2 x 401 console errors are from unauthenticated /api/auth/me calls in guest mode — long-standing behavior, not iter-11 related."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (33/33 unique tests; 1 flaky under xdist that passes on retry)",
+    "frontend": "100% (all iter-11 acceptance criteria met — regressions=0, native.js safe on web, mobile viewport reflows correctly, service worker intact, Capacitor scaffold complete)"
+  },
+  "test_credentials": "Not needed for iter-11 (guest-mode surface fully exercised).",
+  "seed_data_creation": "Attempted to add TEST_iter11_notif task with due_time='23:59' to exercise scheduleNotification no-op path — verified zero console errors. Toast/persistence not asserted (out of iter-11 scope).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 11 wraps the web app in Capacitor 7. The correct data-testid names for the bottom nav are nav-{id}-btn where id ∈ {tasks, shopping, metime, diary, goals} (NOTE: 'metime' NOT 'me-time'). Day-mode toggle testid is 'day-mode-toggle' (not 'daymode-toggle'). Task modal fields: task-form-modal / task-title-input / due-time-input / modal-save-btn / modal-cancel-btn / modal-close-btn / mic-task-title / task-description-input. Monthly goals items use monthly-item-{id} and monthly-toggle-{id} (not monthly-item-toggle-*). The Capacitor plugins directory (/app/frontend/plugins/) is present but the actual iOS/Android compile step CANNOT run in the container (no Android SDK / no Xcode) — that's expected and offloaded to user's local dev per /app/mobile/README.md. Do NOT run 'npx cap sync' here. To exercise native no-ops safely in the browser, just interact normally — every native call is gated on Capacitor.isNativePlatform() which returns false, and returns/logs nothing. The iter-11 mobile-first CSS (safe-area, 44x44 taps, 16px input font, standalone status bar) lives at the bottom of /app/frontend/src/index.css.",
+  "rca_of_the_issue": "N/A — no iter-11 defects found. The single flaky backend test is a pre-existing xdist race unrelated to Capacitor wrap."
+}

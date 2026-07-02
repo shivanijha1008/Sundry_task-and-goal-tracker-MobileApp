@@ -1,4 +1,5 @@
 import { ListTodo, ShoppingCart, Heart, BookHeart, Target } from "lucide-react";
+import { hapticSelect } from "../lib/native";
 
 const NAV = [
   { id: "tasks", label: "Tasks", icon: ListTodo },
@@ -11,7 +12,7 @@ const NAV = [
 export const BottomNav = ({ active, onChange }) => (
   <nav
     data-testid="bottom-nav"
-    className="bottom-nav fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(640px,calc(100vw-24px))]"
+    className="bottom-nav fixed left-1/2 -translate-x-1/2 z-40 w-[min(640px,calc(100vw-16px))]"
   >
     <div
       className="glass-hi flex items-center justify-around px-2 py-2"
@@ -24,13 +25,18 @@ export const BottomNav = ({ active, onChange }) => (
           <button
             key={n.id}
             data-testid={`nav-${n.id}-btn`}
-            onClick={() => onChange(n.id)}
+            onClick={() => {
+              if (!isActive) hapticSelect();
+              onChange(n.id);
+            }}
             className="flex flex-col items-center gap-0.5 px-2 sm:px-3 py-2 rounded-xl transition-all"
             style={{
               background: isActive
                 ? "linear-gradient(135deg, rgba(255,45,146,0.25), rgba(176,38,255,0.25))"
                 : "transparent",
               color: isActive ? "#FF6BB4" : "var(--muted)",
+              minWidth: 56,
+              minHeight: 52,
             }}
           >
             <Icon size={20} strokeWidth={2.5} />

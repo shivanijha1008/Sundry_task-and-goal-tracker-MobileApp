@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { hapticTap, hapticSuccess } from "../lib/native";
 
 const KEY = "scheduler.monthlyGoals.v2"; // bumped: items now carry month_key
 
@@ -131,7 +132,11 @@ export function useMonthlyGoals(online) {
   );
 
   const toggle = useCallback(
-    (item) => update(item.id, { checked: !item.checked }),
+    (item) => {
+      if (!item.checked) hapticSuccess();
+      else hapticTap();
+      return update(item.id, { checked: !item.checked });
+    },
     [update]
   );
 

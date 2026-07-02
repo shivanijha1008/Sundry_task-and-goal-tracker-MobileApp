@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, isBackendOnline } from "../lib/api";
 import { storage } from "../lib/storage";
+import {
+  hapticTap,
+  hapticSuccess,
+  scheduleNotification,
+  cancelNotification,
+  idFromString,
+} from "../lib/native";
 
 function uuid() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -129,6 +136,20 @@ export function useTasks() {
       } catch {
         storage.queueOp({ type: "create", task });
       }
+      // Schedule local notification if task has a due_time (HH:MM today)
+      if (task.due_time && /^\d{2}:\d{2}$/.test(task.due_time)) {
+        const [hh, mm] = task.due_time.split(":").map((s) => parseInt(s, 10));
+        const at = new Date();
+        at.setHours(hh, mm, 0, 0);
+        if (at.getTime() > Date.now() + 30000) {
+          scheduleNotification(
+            idFromString(task.id),
+            task.title,
+            "Sundry reminder — it's time.",
+            at
+          );
+        }
+      }
       return task;
     },
     [tasks, online, persist]
@@ -136,6 +157,7 @@ export function useTasks() {
 
   const updateTask = useCallback(
     async (id, patch) => {
+      const prev = tasks.find((t) => t.id === id);
       const next = tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
       persist(next);
       try {
@@ -143,6 +165,13 @@ export function useTasks() {
         else storage.queueOp({ type: "update", id, patch });
       } catch {
         storage.queueOp({ type: "update", id, patch });
+      }
+      // Haptic when task is checked off
+      if (patch && Object.prototype.hasOwnProperty.call(patch, "completed")) {
+        if (patch.completed) hapticSuccess();
+        else hapticTap();
+        // Cancel any pending reminder once completed
+        if (patch.completed && prev) cancelNotification(idFromString(prev.id));
       }
     },
     [tasks, online, persist]
@@ -152,6 +181,7 @@ export function useTasks() {
     async (id) => {
       const next = tasks.filter((t) => t.id !== id);
       persist(next);
+      cancelNotification(idFromString(id));
       try {
         if (online) await api.deleteTask(id);
         else storage.queueOp({ type: "delete", id });
