@@ -40,6 +40,14 @@ jobs:
         run: yarn build
         working-directory: frontend
 
+      - name: List build output
+        working-directory: frontend
+        run: |
+          pwd
+          ls -la
+          ls -la build || true
+          ls -la dist || true
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
