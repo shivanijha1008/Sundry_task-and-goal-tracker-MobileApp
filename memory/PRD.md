@@ -165,3 +165,54 @@ is gated on `Capacitor.isNativePlatform()`.
 
 All build steps are documented in `/app/mobile/README.md`.
 
+
+## Iteration 12 (Jul 2, 2026) — Daily Nudge (gentle 8 PM reminder)
+
+Sundry now sends one **on-device** notification per day summarising what's left,
+gently prompting you back into the app to plan tomorrow. Zero backend cost — 100%
+`LocalNotifications`. Fully configurable, on by default.
+
+### Behaviour
+- **Default:** enabled, delivers at **20:00 (8 PM)** local time
+- **Copy** is computed live from your data:
+  - `1 task and 2 intentions left. Plan tomorrow?` (mixed)
+  - `3 tasks still open. Wrap up or roll over to tomorrow?` (tasks-only, plural)
+  - `One task left today — one more push? 🌙` (tasks-only, singular)
+  - `You did everything today. Legend. ⭐` (perfect day)
+  - `Clean slate today ✨ Set an intention for tomorrow?` (empty)
+- **Reschedules** debounced (1.8 s) after any task/goal add/complete/delete
+- **Reschedules** on app-resume (Capacitor `appStateChange`) with fallback to
+  `document.visibilitychange` on web
+- If the target time is already past today → next occurrence is tomorrow at that time
+
+### UI
+- Gear icon `settings-btn` in the Tasks tab header (between Day-mode and Profile)
+- Opens `<SettingsModal>` with:
+  - `nudge-toggle` — enable/disable switch (asks native permission on first enable)
+  - `nudge-hour-select` — 24 hour options rendered in user's locale ("9:00 AM"/"20:00")
+  - `nudge-preview` — live copy preview based on current data
+  - `nudge-test-btn` — "Send test nudge in 5s" (native only)
+  - `nudge-web-hint` — friendly explainer on web
+
+### Files
+- `/app/frontend/src/lib/dailyNudge.js` — prefs (localStorage `sundry.dailyNudge`),
+  `computeNudgeBody`, `reschedule`, `cancelDaily`, `rescheduleDebounced`,
+  `fireTestNudge`, `DAILY_NUDGE_ID` (`idFromString('sundry.dailyNudge.v1')`)
+- `/app/frontend/src/components/SettingsModal.jsx` — the UI
+- `/app/frontend/src/App.js` — settings-btn wire-up, rescheduleDebounced on state
+  changes, reschedule on app resume
+
+### Web behaviour
+Every path is a safe no-op on the web (guarded by `isNative()`). The preview and
+saved preferences work on web so users can configure the app before installing
+the mobile build — settings persist to `localStorage` and apply once they
+install the native app.
+
+### Test status
+- Iteration 12 testing agent: **32/33 backend pytest pass (1 known-flaky xdist race
+  unchanged since iter 10), 100% frontend acceptance criteria**
+- All 6 SettingsModal testids present and interactive
+- Preview copy branches verified (singular/plural, perfect-day, empty-slate)
+- localStorage persistence verified across close+reopen
+- One UX nit fixed post-test (info-toast on hour-change suppressed — now only fires on toggle-ON)
+

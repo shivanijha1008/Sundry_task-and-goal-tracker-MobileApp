@@ -27,7 +27,7 @@ export function SettingsModal({ open, onClose, tasksSnapshot }) {
 
   const preview = computeNudgeBody(tasksSnapshot || {});
 
-  const applyChange = async (next) => {
+  const applyChange = async (next, opts = {}) => {
     const merged = writePrefs(next);
     setPrefs(merged);
     setBusy(true);
@@ -38,7 +38,7 @@ export function SettingsModal({ open, onClose, tasksSnapshot }) {
           toast.success(`Daily nudge set for ${labelForTime(merged.hour, merged.minute)}`);
         } else if (isNative()) {
           toast.error("Notification permission denied — enable in system settings.");
-        } else {
+        } else if (opts.notifyWebFallback) {
           toast("Nudges only fire on the installed app 📱", { icon: "ℹ️" });
         }
       } else {
@@ -59,7 +59,8 @@ export function SettingsModal({ open, onClose, tasksSnapshot }) {
         return;
       }
     }
-    applyChange({ ...prefs, enabled: !prefs.enabled });
+    // Show the web-fallback hint on ENABLE only (not on hour changes)
+    applyChange({ ...prefs, enabled: !prefs.enabled }, { notifyWebFallback: !prefs.enabled });
   };
 
   const setHour = (hour) => applyChange({ ...prefs, hour: parseInt(hour, 10) });
